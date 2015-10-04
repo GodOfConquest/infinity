@@ -5,10 +5,6 @@
 require "./inc/functions.php";
 require "./inc/anti-bot.php";
 
-// The dnsbls is an optional DNS blacklist include.
-// Squelch warnings if it doesn't exist.
-@include "./inc/dnsbls.php";
-
 // Fix for magic quotes
 if (get_magic_quotes_gpc()) {
 	function strip_array($var) {
@@ -234,6 +230,7 @@ elseif (isset($_POST['post'])) {
 	// Check if board exists
 	if (!openBoard($post['board']))
 		error($config['error']['noboard']);
+
 	
 	if (!isset($_POST['name']))
 		$_POST['name'] = $config['anonymous'];
@@ -252,6 +249,12 @@ elseif (isset($_POST['post'])) {
 		$post['thread'] = round($_POST['thread']);
 	} else
 		$post['op'] = true;
+
+	// The dnsbls is an optional DNS blacklist include.
+	// Squelch warnings if it doesn't exist.
+	if (!$config['captcha']['enabled'] && !($post['op'] && $config['new_thread_capt'])) {
+		@include "./inc/dnsbls.php";
+	}
 
 	// Check if banned
 	checkBan($board['uri']);
@@ -355,6 +358,32 @@ elseif (isset($_POST['post'])) {
 		if (!isset($post['embed'])) {
 			error($config['error']['invalid_embed']);
 		}
+
+		if ($config['image_reject_repost']) {
+			if ($p = getPostByEmbed($post['embed'])) {
+				error(sprintf($config['error']['fileexists'], 
+					($post['mod'] ? $config['root'] . $config['file_mod'] . '?/' : $config['root']) .
+					($board['dir'] . $config['dir']['res'] .
+						($p['thread'] ?
+							$p['thread'] . '.html#' . $p['id']
+						:
+							$p['id'] . '.html'
+						))
+				));
+			}
+		} else if (!$post['op'] && $config['image_reject_repost_in_thread']) {
+			if ($p = getPostByEmbedInThread($post['embed'], $post['thread'])) {
+				error(sprintf($config['error']['fileexistsinthread'], 
+					($post['mod'] ? $config['root'] . $config['file_mod'] . '?/' : $config['root']) .
+					($board['dir'] . $config['dir']['res'] .
+						($p['thread'] ?
+							$p['thread'] . '.html#' . $p['id']
+						:
+							$p['id'] . '.html'
+						))
+				));
+			}
+		}
 	}
 	
 	if (!hasPermission($config['mod']['bypass_field_disable'], $board['uri'])) {
@@ -449,8 +478,8 @@ elseif (isset($_POST['post'])) {
 	$tor = checkDNSBL();
 	if ($tor && !(isset($_SERVER['HTTP_X_TOR'], $_SERVER['REMOTE_ADDR']) && $_SERVER['REMOTE_ADDR'] == '127.0.0.2' && $_SERVER['HTTP_X_TOR'] = 'true'))
 		error('To post on 8chan over Tor, you must use the hidden service for security reasons. You can find it at <a href="http://fullchan4jtta4sx.onion">http://fullchan4jtta4sx.onion</a>.');
-	if ($tor && $post['has_file'])
-		error('Sorry. Tor users can\'t upload files.');
+	if ($tor && $post['has_file'] && !$config['tor_image_posting'])
+		error('Sorry. Tor users can\'t upload files on this board.');
 	if ($tor && !$config['tor_posting'])
 		error('Sorry. The owner of this board has decided not to allow Tor posters for some reason...');
 
@@ -664,7 +693,7 @@ elseif (isset($_POST['post'])) {
 		}
 	}
 
-	if ($config['allowed_tags'] && $post['op'] && isset($_POST['tag']) && isset($config['allowed_tags'][$_POST['tag']])) {
+	if ($config['allowed_tags'] && $post['op'] && isset($_POST['tag']) && $_POST['tag'] && isset($config['allowed_tags'][$_POST['tag']])) {
 		$post['body'] .= "\n<tinyboard tag>" . $_POST['tag'] . "</tinyboard>";
 	}
 
@@ -906,7 +935,7 @@ elseif (isset($_POST['post'])) {
 				));
 			}
 		}
-		}
+	}
 	
 	if (!hasPermission($config['mod']['postunoriginal'], $board['uri']) && $config['robot_enable'] && checkRobot($post['body_nomarkup'])) {
 		undoImage($post);
@@ -946,7 +975,7 @@ elseif (isset($_POST['post'])) {
 	// Commit the post to the database.
 	$post['id'] = $id = post($post);
 	
-	insertFloodPost($post);
+	if (!$tor) insertFloodPost($post);
 	
 	// Update statistics for this board.
 	updateStatisticsForPost( $post );

@@ -25,12 +25,9 @@ main {
 
 /* Tables */
 table {
-  margin: auto;
-  width: 100%;
-}
-
-table {
 	margin: auto;
+}
+table.board-list-table {
 	width: 100%;
 }
 table tbody td {
@@ -317,7 +314,7 @@ div.post img.icon {
   padding: 0;
 }
 
-div.post i.fa {
+div.post i.fa, div.thread i.fa {
   margin: 0 4px;
   font-size: 16px;
 }
@@ -781,6 +778,16 @@ pre {
   max-height: 192px;
 }
 
+.theme-catalog div.grid-size-medium img {
+  max-height: 33%;
+  max-width: 95%
+}
+
+.theme-catalog div.grid-size-medium {
+  min-width:200px; max-width: 200px;
+  max-height: 274px;
+}
+
 .theme-catalog div.grid-size-large img {
   max-height: 40%;
   max-width: 95%
@@ -1237,15 +1244,13 @@ div.boardlist a {
 div.mix {
 	display: inline-block;
 } 
-.theme-catalog div.thread:hover {
-	overflow-y: auto; width: 100%
-}
 
 /* Mona Font */
 .aa {
 	font-family: Mona, "MS PGothic", "ＭＳ Ｐゴシック", sans-serif;
 	display: block!important;
 	font-size: 12pt;
+	line-height: 1.1;
 }
 .dx,
 .dy,
@@ -1653,8 +1658,8 @@ td.board-tags a.tag-link {
 .announcement {
 	font-size: 75%;
 	padding-bottom: 1%;
-	margin-left: 25%; 
-	margin-right: 25%;
+	margin-left: 5%; 
+	margin-right: 5%;
 }
 
 /* Gallery view */

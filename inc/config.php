@@ -670,17 +670,19 @@
 	$config['markup'][] = array(
 		"/\[(aa|code)\](.+?)\[\/(?:aa|code)\]/ms", 
 		function($matches) {
-			$markupchars = array('_', '\'', '~', '*', '=');
+			$markupchars = array('_', '\'', '~', '*', '=', '-');
 			$replacement = $markupchars;
 			array_walk($replacement, function(&$v) {
 				$v = "&#".ord($v).";";
 			});
 
-			// These are hacky fixes for ###board-tags### and >quotes.
+			// These are hacky fixes for ###board-tags###, ellipses and >quotes.
 			$markupchars[] = '###';
 			$replacement[] = '&#35;&#35;&#35;';
 			$markupchars[] = '&gt;';
 			$replacement[] = '&#62;';
+			$markupchars[] = '...';
+			$replacement[] = '..&#46;';
 
 			if ($matches[1] === 'aa') {
 				return '<span class="aa">' . str_replace($markupchars, $replacement, $matches[2]) . '</span>';
@@ -839,7 +841,7 @@
 	// Location of thumbnail to use for spoiler images.
 	$config['spoiler_image'] = 'static/spoiler.png';
 	// Location of thumbnail to use for deleted images.
-	// $config['image_deleted'] = 'static/deleted.png';
+	$config['image_deleted'] = 'static/deleted.png';
 	// Location of placeholder image for fileless posts in catalog.
 	$config['no_file_image'] = 'static/no-file.png';
 
@@ -1381,6 +1383,12 @@
 	// PM snippet (for ?/inbox) length in characters.
 	$config['mod']['snippet_length'] = 75;
 
+	// Max PMs that can be sent by one user per hour.
+	$config['mod']['pm_ratelimit'] = 100;
+
+	// Maximum size of a PM.
+	$config['mod']['pm_maxsize'] = 8192;
+
 	// Edit raw HTML in posts by default.
 	$config['mod']['raw_html_default'] = false;
 
@@ -1530,7 +1538,7 @@
 	// Edit any users' login information
 	$config['mod']['editusers'] = ADMIN;
 	// Change user's own password
-	$config['mod']['change_password'] = JANITOR;
+	$config['mod']['edit_profile'] = JANITOR;
 	// Delete a user
 	$config['mod']['deleteusers'] = ADMIN;
 	// Create a user
@@ -1544,6 +1552,10 @@
 	$config['mod']['modlog_ip'] = MOD;
 	// Create a PM (viewing mod usernames)
 	$config['mod']['create_pm'] = JANITOR;
+	// Create a PM for anyone 
+	$config['mod']['pm_all'] = ADMIN;
+	// Bypass PM ratelimit
+	$config['mod']['bypass_pm_ratelimit'] = ADMIN;
 	// Read any PM, sent to or from anybody
 	$config['mod']['master_pm'] = ADMIN;
 	// Rebuild everything
@@ -1783,4 +1795,14 @@
 	$config['report_captcha'] = false;
 
 	// Allowed HTML tags in ?/edit_pages.
-	$config['allowed_html'] = 'a[href|title],p,br,li,ol,ul,strong,em,u,h2,b,i,tt,div,img[src|alt|title],hr';
+	$config['allowed_html'] = 'a[href|title],p,br,li,ol,ul,strong,em,u,h2,b,i,tt,div,img[src|alt|title],hr,h1,h2,h3,h4,h5';
+
+	// Use custom assets? (spoiler file, etc; this is used by ?/settings and ?/assets)
+	$config['custom_assets'] = false;
+
+	// If you use CloudFlare set these for some features to work correctly.
+	$config['cloudflare'] = array();
+	$config['cloudflare']['enabled'] = false;
+	$config['cloudflare']['token'] = 'token';
+	$config['cloudflare']['email'] = 'email';
+	$config['cloudflare']['domain'] = 'example.com';

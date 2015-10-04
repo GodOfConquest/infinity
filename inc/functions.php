@@ -121,7 +121,7 @@ function loadConfig() {
 	}
 
 	if (!file_exists('inc/instance-config.php'))
-		$error('Tinyboard is not configured! Create inc/instance-config.php.');
+		$error('Posting is down momentarily. Please try again later.');
 
 	// Initialize locale as early as possible
 
@@ -589,8 +589,41 @@ function boardTitle($uri) {
 	return false;
 }
 
-function purge($uri) {
+function cloudflare_purge($uri) {
+	global $config;
+
+	if (!$config['cloudflare']['enabled']) return;
+
+	$fields = array(
+		'a' => 'zone_file_purge',
+		'tkn' => $config['cloudflare']['token'],
+		'email' => $config['cloudflare']['email'],
+		'z' => $config['cloudflare']['domain'],
+		'url' => 'https://' . $config['cloudflare']['domain'] . '/' . $uri
+	);
+
+	$fields_string = http_build_query($fields);
+
+	$ch = curl_init();
+
+	curl_setopt($ch, CURLOPT_URL, 'https://www.cloudflare.com/api_json.html');
+	curl_setopt($ch, CURLOPT_POST, count($fields));
+	curl_setopt($ch, CURLOPT_POSTFIELDS, $fields_string);
+	curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+	$result = curl_exec($ch);
+
+	curl_close($ch);
+
+	return $result;
+}
+
+function purge($uri, $cloudflare = false) {
 	global $config, $debug;
+
+	if ($cloudflare) {
+		cloudflare_purge($uri);
+	}
 
 	if (!isset($config['purge'])) return;
 
@@ -918,7 +951,9 @@ function fetchBoardActivity( array $uris = array(), $forTime = false, $detailed 
 				}
 				
 				// Set the active posters as the unserialized array.
-				$boardActivity['active'][$bsRow['stat_uri']] = unserialize( $bsRow['author_ip_array'] );
+				$uns = @unserialize($bsRow['author_ip_array']);
+				if (!$uns) continue;
+				$boardActivity['active'][$bsRow['stat_uri']] = $uns;
 				// Start the average PPH off at the current post count.
 				$boardActivity['average'][$bsRow['stat_uri']] = $bsRow['post_count'];
 			}
@@ -937,7 +972,9 @@ function fetchBoardActivity( array $uris = array(), $forTime = false, $detailed 
 				}
 				
 				// Merge our active poster arrays. Unique counting is done below.
-				$boardActivity['active'][$bsRow['stat_uri']] = array_merge( $boardActivity['active'][$bsRow['stat_uri']], unserialize( $bsRow['author_ip_array'] ) );
+				$uns = @unserialize($bsRow['author_ip_array']);
+				if (!$uns) continue;
+				$boardActivity['active'][$bsRow['stat_uri']] = array_merge( $boardActivity['active'][$bsRow['stat_uri']], $uns );
 				// Add our post count to the average. Averaging is done below.
 				$boardActivity['average'][$bsRow['stat_uri']] += $bsRow['post_count'];
 			}
@@ -986,7 +1023,7 @@ function fetchBoardTags( $uris ) {
 				$boardTags[ $tagRow['uri'] ] = array();
 			}
 			
-			$boardTags[ $tagRow['uri'] ][] = htmlentities( utf8_encode( $tag ) );
+			$boardTags[ $tagRow['uri'] ][] = strtolower( $tag );
 		}
 	}
 	
@@ -2520,7 +2557,7 @@ function strip_combining_chars($str) {
 		$o = 0;
 		$ord = ordutf8($char, $o);
 
-		if ( ($ord >= 768 && $ord <= 879) || ($ord >= 7616 && $ord <= 7679) || ($ord >= 8400 && $ord <= 8447) || ($ord >= 65056 && $ord <= 65071)){
+		if ( ($ord >= 768 && $ord <= 879) || ($ord >= 1536 && $ord <= 1791) || ($ord >= 3655 && $ord <= 3659) || ($ord >= 7616 && $ord <= 7679) || ($ord >= 8400 && $ord <= 8447) || ($ord >= 65056 && $ord <= 65071)){
 			continue;
 		}
 
@@ -2797,6 +2834,53 @@ function getPostByHashInThread($hash, $thread) {
 	global $board;
 	$query = prepare(sprintf("SELECT `id`,`thread` FROM ``posts_%s`` WHERE `filehash` = :hash AND ( `thread` = :thread OR `id` = :thread )", $board['uri']));
 	$query->bindValue(':hash', $hash, PDO::PARAM_STR);
+	$query->bindValue(':thread', $thread, PDO::PARAM_INT);
+	$query->execute() or error(db_error($query));
+
+	if ($post = $query->fetch(PDO::FETCH_ASSOC)) {
+		return $post;
+	}
+
+	return false;
+}
+
+function getPostByEmbed($embed) {
+	global $board, $config;
+	$matches = array();
+	foreach ($config['embedding'] as &$e) {
+		if (preg_match($e[0], $embed, $matches) && isset($matches[1]) && !empty($matches[1])) {
+			$embed = '%'.$matches[1].'%';
+			break;
+		}
+	}
+
+	if (!isset($embed)) return false;
+
+	$query = prepare(sprintf("SELECT `id`,`thread` FROM ``posts_%s`` WHERE `embed` LIKE :embed", $board['uri']));
+	$query->bindValue(':embed', $embed, PDO::PARAM_STR);
+	$query->execute() or error(db_error($query));
+
+	if ($post = $query->fetch(PDO::FETCH_ASSOC)) {
+		return $post;
+	}
+
+	return false;
+}
+
+function getPostByEmbedInThread($embed, $thread) {
+	global $board, $config;
+	$matches = array();
+	foreach ($config['embedding'] as &$e) {
+		if (preg_match($e[0], $embed, $matches) && isset($matches[1]) && !empty($matches[1])) {
+			$embed = '%'.$matches[1].'%';
+			break;
+		}
+	}
+
+	if (!isset($embed)) return false;
+
+	$query = prepare(sprintf("SELECT `id`,`thread` FROM ``posts_%s`` WHERE `embed` = :embed AND ( `thread` = :thread OR `id` = :thread )", $board['uri']));
+	$query->bindValue(':embed', $embed, PDO::PARAM_STR);
 	$query->bindValue(':thread', $thread, PDO::PARAM_INT);
 	$query->execute() or error(db_error($query));
 

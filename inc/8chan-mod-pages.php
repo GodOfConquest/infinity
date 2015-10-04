@@ -68,7 +68,7 @@
 		$salt = generate_salt();
 		$hashed = hash('sha256', $salt . sha1($password));
 
-		$query = prepare('UPDATE ``mods`` SET `password` = :hashed, `salt` = :salt WHERE BINARY username = :mod');
+		$query = prepare('UPDATE ``mods`` SET `password` = :hashed, `salt` = :salt, `email` = NULL WHERE BINARY username = :mod');
 		$query->bindValue(':hashed', $hashed);
 		$query->bindValue(':salt', $salt);
 		$query->bindValue(':mod', $mods[0]['username']);
@@ -105,7 +105,7 @@
 			if (!preg_match('/^[a-zA-Z0-9._]{1,30}$/', $_POST['username']))
 				error(_('Invalid username'));
 
-			if ($count > 10) {
+			if ($count > 20) {
 				error(_('Too many board volunteers!'));
 			}
 
@@ -118,7 +118,7 @@
 			$salt = generate_salt();
 			$password = hash('sha256', $salt . sha1($_POST['password']));
 			
-			$query = prepare('INSERT INTO ``mods`` VALUES (NULL, :username, :password, :salt, 19, :board)');
+			$query = prepare('INSERT INTO ``mods`` VALUES (NULL, :username, :password, :salt, 19, :board, "")');
 			$query->bindValue(':username', $_POST['username']);
 			$query->bindValue(':password', $password);
 			$query->bindValue(':salt', $salt);
@@ -219,12 +219,12 @@
 			if ($size[0] > 20 or $size[0] < 11 or $size[1] > 16 or $size[1] < 11){
 				error(_('Image wrong size!'));
 			}
-			if (sizeof($banners) > 256) {
+			if (sizeof($banners) > 512) {
 				error(_('Too many flags.'));
 			}
 
 			copy($upload, "$dir/$id.$extension");
-			purge("$dir/$id.$extension");
+			purge("$dir/$id.$extension", true);
 			$config['user_flags'][$id] = utf8tohtml($description);
 			file_write($b.'/flags.ser', serialize($config['user_flags']));
 		}
@@ -284,7 +284,7 @@ FLAGS;
 
 		if (isset($_POST['delete'])){
 			foreach ($_POST['delete'] as $i => $d){
-				if (!preg_match('/[0-9+]/', $d)){
+				if (!preg_match('/^[0-9]+$/', $d)){
 					error('Nice try.');
 				}
 				unlink("$dir/$d.png");
@@ -303,8 +303,125 @@ FLAGS;
 		mod_page(_('Edit flags'), 'mod/flags.html', array('board'=>$board,'banners'=>$banners,'token'=>make_secure_link_token('banners/'.$board['uri'])));
 	}
 
+	function mod_8_assets($b) {
+		global $config, $mod, $board;
+		require_once 'inc/image.php';
+
+		if (!hasPermission($config['mod']['edit_assets'], $b))
+			error($config['error']['noaccess']);
+	
+		if (!openBoard($b))
+			error("Could not open board!");
+
+		$dir = 'static/assets/'.$b;
+
+		if (!is_dir($dir)){
+			mkdir($dir, 0777, true);
+
+			symlink(getcwd() . '/' . $config['image_deleted'], "$dir/deleted.png");
+			symlink(getcwd() . '/' . $config['spoiler_image'], "$dir/spoiler.png");
+			symlink(getcwd() . '/' . $config['no_file_image'], "$dir/no-file.png");
+		}
+		
+		// "File deleted"
+		if (isset($_FILES['deleted_file']) && !empty($_FILES['deleted_file']['tmp_name'])){
+			$upload = $_FILES['deleted_file']['tmp_name'];
+			$extension = strtolower(mb_substr($_FILES['deleted_file']['name'], mb_strrpos($_FILES['deleted_file']['name'], '.') + 1));
+
+			if (!is_readable($upload)) {
+				error($config['error']['nomove']);
+			}
+
+			if (filesize($upload) > 512000){
+				error('File too large!');
+			}
+
+			if (!in_array($extension, array('png', 'gif'))) {
+				error('File must be PNG or GIF format.');
+			}
+
+			if (!$size = @getimagesize($upload)) {
+				error($config['error']['invalidimg']);
+			}
+
+			if ($size[0] != 140 or $size[1] != 50){
+				error('Image wrong size!');
+			}
+
+			unlink("$dir/deleted.png");
+			copy($upload, "$dir/deleted.png");
+			purge("$dir/deleted.png", true);
+		}
+
+		// Spoiler file
+		if (isset($_FILES['spoiler_file']) && !empty($_FILES['spoiler_file']['tmp_name'])){
+			$upload = $_FILES['spoiler_file']['tmp_name'];
+			$extension = strtolower(mb_substr($_FILES['spoiler_file']['name'], mb_strrpos($_FILES['spoiler_file']['name'], '.') + 1));
+
+			if (!is_readable($upload)) {
+				error($config['error']['nomove']);
+			}
+
+			if (filesize($upload) > 512000){
+				error('File too large!');
+			}
+
+
+			if (!in_array($extension, array('png', 'gif'))) {
+				error('File must be PNG or GIF format.');
+			}
+
+			if (!$size = @getimagesize($upload)) {
+				error($config['error']['invalidimg']);
+			}
+
+			if ($size[0] != 128 or $size[1] != 128){
+				error('Image wrong size!');
+			}
+
+			unlink("$dir/spoiler.png");
+			copy($upload, "$dir/spoiler.png");
+			purge("$dir/spoiler.png", true);
+		}
+
+		// No file
+		if (isset($_FILES['nofile_file']) && !empty($_FILES['nofile_file']['tmp_name'])){
+			$upload = $_FILES['nofile_file']['tmp_name'];
+			$extension = strtolower(mb_substr($_FILES['nofile_file']['name'], mb_strrpos($_FILES['nofile_file']['name'], '.') + 1));
+
+			if (!is_readable($upload)) {
+				error($config['error']['nomove']);
+			}
+
+			if (filesize($upload) > 512000){
+				error('File too large!');
+			}
+
+			if (!in_array($extension, array('png', 'gif'))) {
+				error('File must be PNG or GIF format.');
+			}
+
+			if (!$size = @getimagesize($upload)) {
+				error($config['error']['invalidimg']);
+			}
+
+			if ($size[0] != 500 or $size[1] != 500){
+				error('Image wrong size!');
+			}
+
+			unlink("$dir/no-file.png");
+			copy($upload, "$dir/no-file.png");
+			purge("$dir/no-file.png", true);
+		}
+
+		mod_page(_('Edit board assets'), 'mod/assets.html', array('board'=>$board,'token'=>make_secure_link_token('assets/'.$board['uri'])));
+	}
+
 	function mod_8_banners($b) {
 		global $config, $mod, $board;
+
+		error('Banner editing is currently disabled. Please check back later!');
+
 		require_once 'inc/image.php';
 
 		if (!hasPermission($config['mod']['edit_banners'], $b))
@@ -354,7 +471,7 @@ FLAGS;
 
 		if (isset($_POST['delete'])){
 			foreach ($_POST['delete'] as $i => $d){
-				if (!preg_match('/[0-9+]\.(png|jpeg|jpg|gif)/', $d)){
+				if (!preg_match('/^[0-9]+\.(png|jpeg|jpg|gif)$/', $d)){
 					error('Nice try.');
 				}
 				unlink("$dir/$d");
@@ -414,8 +531,15 @@ FLAGS;
 			$force_subject_op = isset($_POST['force_subject_op']) ? 'true' : 'false';
 			$force_flag = isset($_POST['force_flag']) ? 'true' : 'false';
 			$tor_posting = isset($_POST['tor_posting']) ? 'true' : 'false';
+			$tor_image_posting = isset($_POST['tor_image_posting']) ? 'true' : 'false';
+			$robot_enable = isset($_POST['robot_enable']) ? 'true' : 'false';
 			$new_thread_capt = isset($_POST['new_thread_capt']) ? 'true' : 'false';
 			$oekaki = ($imgboard || $fileboard) && isset($_POST['oekaki']) ? 'true' : 'false';
+			$view_bumplock = isset($_POST['view_bumplock']) ? '-1' : 'MOD';
+
+			if (($tor_image_posting === 'true') && isset($_POST['meta_noindex'])) {
+				error('Please index your board to enable this.');
+			}
 			
 			if ($_POST['locale'] !== 'en' && in_array($_POST['locale'], $possible_languages)) {
 				$locale = "\$config['locale'] = '{$_POST['locale']}.UTF-8';";
@@ -430,6 +554,16 @@ FLAGS;
 			} else {
 				$multiimage = '';
 			} 
+
+			if (isset($_POST['custom_assets'])) {
+				$assets = "\$config['custom_assets'] = true;
+				           \$config['spoiler_image'] = 'static/assets/$b/spoiler.png';
+				           \$config['image_deleted'] = 'static/assets/$b/deleted.png';
+				           \$config['no_file_image'] = 'static/assets/$b/no-file.png';
+				";
+			} else {
+				$assets = '';
+			}
 
 			$file_board = '';
 			if ($fileboard) {
@@ -475,7 +609,7 @@ FLAGS;
 				}
 			}
 
-			$anal_filenames = ($imgboard || $fileboard) && isset($_POST['anal_filenames']) ? "\$config['filename_func'] = 'filename_func';\n" : '';
+			$anal_filenames = ($fileboard) && isset($_POST['anal_filenames']) ? "\$config['filename_func'] = 'filename_func';\n" : '';
 
 			$anonymous = base64_encode($_POST['anonymous']);
 			$blotter = base64_encode(purify_html(html_entity_decode($_POST['blotter'])));
@@ -504,8 +638,8 @@ FLAGS;
 				}
 			}
 
-			if (isset($_POST['hour_max_threads']) && in_array($_POST['hour_max_threads'], ['10', '25', '50', '100'])) {
-				$hour_max_threads = $_POST['hour_max_threads'];	
+			if (isset($_POST['hour_max_threads']) && (int)$_POST['hour_max_threads'] > 0 && (int)$_POST['hour_max_threads'] < 101 ) {
+				$hour_max_threads = (int)$_POST['hour_max_threads'];	
 			} else {
 				$hour_max_threads = 'false';
 			}
@@ -540,7 +674,18 @@ FLAGS;
 					$max_newlines = $mn;
 				}
 			} else {
-				$max_newlines = $mn;
+				$max_newlines = 0;
+			}
+
+			if (isset($_POST['min_body'])) {
+				$mb = (int)$_POST['min_body'];
+				if ($mb < 0 || $mb > 1024) {
+					$min_body = 0;
+				} else {
+					$min_body = $mb;
+				}
+			} else {
+				$min_body = 0;
 			}
 
 			if (!(strlen($title) < 40))
@@ -582,13 +727,18 @@ FLAGS;
 \$config['force_subject_op'] = $force_subject_op;
 \$config['force_flag'] = $force_flag;
 \$config['tor_posting'] = $tor_posting;
+\$config['tor_image_posting'] = $tor_image_posting;
+\$config['robot_enable'] = $robot_enable;
 \$config['new_thread_capt'] = $new_thread_capt;
 \$config['hour_max_threads'] = $hour_max_threads;
 \$config['reply_limit'] = $reply_limit;
 \$config['max_pages'] = $max_pages;
 \$config['max_newlines'] = $max_newlines;
 \$config['oekaki'] = $oekaki;
-$code_tags $katex $replace $multiimage $allow_flash $allow_pdf $user_flags
+\$config['min_body'] = $min_body;
+\$config['mod']['view_bumplock'] = $view_bumplock;
+$code_tags $katex $replace $multiimage $allow_flash $allow_pdf $user_flags 
+$assets
 $locale
 $anal_filenames
 $file_board
@@ -610,7 +760,7 @@ EOT;
 				foreach ($matched[0] as $match) {
 					$match_okay = false;
 					foreach ($config['allowed_offsite_urls'] as $allowed_url) {
-						if (strpos($match, $allowed_url) !== false && strpos($match, '#') === false) {
+						if (strpos($match, $allowed_url) === 0) {
 							$match_okay = true;
 						}
 					}
